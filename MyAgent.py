@@ -15,25 +15,19 @@ class MyAgent(AlphaBetaAgent):
   This is the skeleton of an agent to play the Tak game.
   """
 
-    # def iterative_deepening_search(self,state):
-    #     for depth in range(0, 10):
-    #         result = minimax.search(state, self)
-    #         #if result!=
-
     def __init__(self):
         self.n = 0  # counter to check the time elapsed and consequently change the maxDepth
-        self.maxDepth = 3
-        self.minDepth = 2
+        self.maxDepth = 2
+        self.minDepth = 1
         self.behaviour = False
         self.adversaryPlacedCapstones = []  # inside there are (x,y) elements
         self.total_time = 300  # 5min = 5*60sec = 300sec
+        self.evaluationValues = dict()
 
     def get_action(self, state, last_action, time_left):
         self.last_action = last_action
         self.time_left = time_left  # in seconds
         interval = 2 ** (self.n + 1)
-        interval2 = 2 ** self.n
-
         if state.turn <= 2 * (state.size - 1):
             self.behaviour = True
         else:
@@ -41,12 +35,8 @@ class MyAgent(AlphaBetaAgent):
             # update maxDepth
             if time_left <= self.total_time / interval:
                 self.n += 1
+                interval2 = 2 ** self.n
                 self.maxDepth = max(self.maxDepth / interval2, self.minDepth)
-
-        if state.turn <= 2 * (state.size - 1):
-            self.behaviour = True
-        else:
-            self.behaviour = False
 
         return minimax.search(state, self)
 
@@ -84,10 +74,12 @@ class MyAgent(AlphaBetaAgent):
             else:
                 return False
         # check if you reached maxDepth
-        if depth == self.maxDepth:
-            return True
         else:
-            return False
+            if depth == self.maxDepth:
+                return True
+            else:
+                return False
+
 
     """
   The evaluate function must return an integer value
@@ -95,26 +87,37 @@ class MyAgent(AlphaBetaAgent):
   """
 
     def evaluate(self, state):
-
+        hashValue = state.get_data_tuple()
+        if hashValue in self.evaluationValues:
+            return self.evaluationValues[hashValue]
         myId = self.id
         otherId = 1 - myId
+        if state.game_over_check():
+            if myId == state.get_winner():
+                return 1000
+            else:
+                return -1000
 
         # FIRST FEATURE: difference between topBlack and topWhite
-        weightDiff = 150/state.size**2
-        countMine, countOtherPlayer = state.control_count()
-        if myId == 0:
-            diff = countMine - countOtherPlayer
-        else:
-            diff = countOtherPlayer - countMine
+        #weightDiff = 150 / state.size ** 2
+        #countMine, countOtherPlayer = state.control_count()
+        #if myId == 0:
+        #    diff = countMine - countOtherPlayer
+        #else:
+        #    diff = countOtherPlayer - countMine
 
-        # SECOND FEATURE
-        weightCountAdmissibleCells = 150/state.size**2
-        countAdmissibleCellsMyId = self.how_many_stones_miss_and_admissible_cells(state, myId)
-        countAdmissibleCellsOtherId = self.how_many_stones_miss_and_admissible_cells(state, otherId)
-        """
-        # THIRD FEATURE and FOURTH FEATURE
-        weightDistanceDoneToGoal = 350 / state.size
-        weightDistanceDoneToGoalWithStack = 350 / state.size
+        # SECOND FEATURE: how many empty cells are in the board + cells of other player (no capstones)
+        #weightCountAdmissibleCells = 150 / state.size ** 2
+        #countAdmissibleCellsMyId = self.how_many_stones_miss_and_admissible_cells(state, myId)
+
+        # THIRD FEATURE: creation of subpath and computation of the distance from the goal
+        # and FOURTH FEATURE: creation of subpath and computation of how many stones are yours in the stack,
+        # check if the number of stones is enough to reach the goal
+
+        weightDistanceDoneToGoalMyId = 500 / state.size
+        weightDistanceDoneToGoalOtherId = 500 / state.size
+        weightDistanceDoneToGoalWithStackMyId = 500 / state.size
+        weightDistanceDoneToGoalWithStackOtherId = 500 / state.size
         minDistanceFromGoal, minDistanceFromGoalWithStack = self.myCheck_H_V_path(myId, state)
         distanceDoneToGoalMyId = state.size - minDistanceFromGoal
         distanceDoneToGoalWithStackMyId = state.size - minDistanceFromGoalWithStack
@@ -122,22 +125,13 @@ class MyAgent(AlphaBetaAgent):
         minDistanceFromGoal, minDistanceFromGoalWithStack = self.myCheck_H_V_path(otherId, state)
         distanceDoneToGoalOtherId = state.size - minDistanceFromGoal
         distanceDoneToGoalWithStackOtherId = state.size - minDistanceFromGoalWithStack
-        """
 
-
-
-        if state.game_over_check():
-            if myId == state.get_winner():
-                return 1000
-            else:
-                return -1000
-
-        else:
-            return weightDiff * diff \
-                   + weightCountAdmissibleCells * countAdmissibleCellsMyId - weightCountAdmissibleCells * countAdmissibleCellsOtherId
-                   #+ weightDistanceDoneToGoal * distanceDoneToGoalMyId - weightDistanceDoneToGoal * distanceDoneToGoalOtherId \
-                   #+ weightDistanceDoneToGoalWithStack * distanceDoneToGoalWithStackMyId - weightDistanceDoneToGoalWithStack * distanceDoneToGoalWithStackOtherId
-
+        evaluation = + weightDistanceDoneToGoalMyId * distanceDoneToGoalMyId \
+                     - weightDistanceDoneToGoalOtherId * distanceDoneToGoalOtherId \
+                     + weightDistanceDoneToGoalWithStackMyId * distanceDoneToGoalWithStackMyId \
+                     - weightDistanceDoneToGoalWithStackOtherId * distanceDoneToGoalWithStackOtherId
+        self.evaluationValues[hashValue] = evaluation
+        return evaluation
 
     def how_many_stones_miss_and_admissible_cells(self, state, player):
         myId = player
@@ -165,7 +159,8 @@ class MyAgent(AlphaBetaAgent):
     def myCheck_H_V_path(self, player, state):
         minDistanceFromGoalLR, minDistanceFromGoalWithStackLR = self.myCheck_horizontal_path(player, state)
         minDistanceFromGoalUD, minDistanceFromGoalWithStackUD = self.myCheck_vertical_path(player, state)
-        return min(minDistanceFromGoalLR, minDistanceFromGoalUD), min(minDistanceFromGoalWithStackLR, minDistanceFromGoalWithStackUD)
+        return min(minDistanceFromGoalLR, minDistanceFromGoalUD), min(minDistanceFromGoalWithStackLR,
+                                                                      minDistanceFromGoalWithStackUD)
 
     """
   Check whether there is a horizontal winnning path for a given player.
@@ -211,7 +206,7 @@ class MyAgent(AlphaBetaAgent):
 
     def myBfs(self, S, direction, player, state):
         # initialize BFS
-        minDistanceFromGoal = math.inf
+        minDistanceFromGoal = state.size + 1
         parent = [[None for _ in range(state.size)] for _ in range(state.size)]
         Q = Queue()
         for s in S:
@@ -234,7 +229,7 @@ class MyAgent(AlphaBetaAgent):
         # check whether the other side was reached
         r, c, step, reverse = self.getDirectionIndexes(direction, state)
         for i in range(0, state.size):
-            maxListOfPath = []  # list of paths
+            # maxListOfPath = []  # list of paths
             maxList = []  # list of coordinates of the subpaths
             iterationList = range(0, state.size)
             listOfDistancesFromGoal = []
@@ -262,16 +257,16 @@ class MyAgent(AlphaBetaAgent):
             if len(maxList) == 1:
                 return listOfDistancesFromGoal[0], minDistanceFromGoal
             elif len(maxList) > 1:
-                return listOfDistancesFromGoal[self.findFarthestFromCapstone(maxList)], minDistanceFromGoal
+                return listOfDistancesFromGoal[self.findFarthestFromCapstone(maxList, state)], minDistanceFromGoal
             r += step[0]
             c += step[1]
         return state.size, minDistanceFromGoal
 
-    def findFarthestFromCapstone(self, maxList):
+    def findFarthestFromCapstone(self, maxList, state):
         farthestElement = None
-        maxDistance = - math.inf
+        maxDistance = - state.size + 1
         for i in range(0, len(maxList)):
-            distance = math.inf
+            distance = state.size + 1
             for capstone in self.adversaryPlacedCapstones:
                 distance = min(distance,
                                self.computeEuclidianDistance(capstone[0], capstone[1], maxList[i][0], maxList[i][1]))
@@ -334,7 +329,7 @@ class MyAgent(AlphaBetaAgent):
         lenPossiblePath = 1
         countStonesMyId -= 1
         while (0 <= r < state.size) and (0 <= c < state.size) and (countStonesMyId > 0):
-            if len(state.board[r][c]) != 0:
+            if len(state.board[r][c]) > 1:
                 piece_type, owner = state.board[r][c].top()
                 if piece_type == tak.STANDING_STONE:
                     if flagCapstoneOnTop is True:
